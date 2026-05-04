@@ -2,16 +2,39 @@ import streamlit as st
 import pandas as pd
 import joblib
 
-# Load model
+# ===== LOAD MODEL =====
 pipeline = joblib.load("model.pkl")
 
+# ===== FIX SimpleImputer ERROR =====
+from sklearn.impute import SimpleImputer
+
+def fix_pipeline(obj):
+    try:
+        if isinstance(obj, SimpleImputer):
+            if not hasattr(obj, "_fill_dtype"):
+                obj._fill_dtype = None
+
+        if hasattr(obj, "steps"):  # Pipeline
+            for name, step in obj.steps:
+                fix_pipeline(step)
+
+        if hasattr(obj, "transformers"):  # ColumnTransformer
+            for name, trans, cols in obj.transformers:
+                fix_pipeline(trans)
+
+    except:
+        pass
+
+fix_pipeline(pipeline)
+
+# ===== PAGE CONFIG =====
 st.set_page_config(
     page_title="AI Placement Predictor",
     page_icon="🎓",
     layout="wide"
 )
 
-# ===== CUSTOM CSS (PREMIUM UI) =====
+# ===== CUSTOM CSS =====
 st.markdown("""
 <style>
 body {
@@ -140,16 +163,20 @@ if submit:
             'backlogs': backlogs
         }])
 
-        proba = pipeline.predict_proba(data)[0][1] * 100
+        # ===== SAFE PREDICTION =====
+        if hasattr(pipeline, "predict_proba"):
+            proba = pipeline.predict_proba(data)[0][1] * 100
+        else:
+            proba = pipeline.predict(data)[0] * 100
 
-        # ===== METRICS CARDS =====
+        # ===== METRICS =====
         colA, colB, colC = st.columns(3)
 
         colA.metric("🎯 Placement Chance", f"{round(proba,2)}%")
         colB.metric("💼 Experience Score", f"{work_exp} months")
         colC.metric("📊 Skill Score", f"{tech}")
 
-        # ===== PROGRESS BAR =====
+        # ===== PROGRESS =====
         st.progress(int(proba))
 
         # ===== CHART =====
@@ -161,7 +188,7 @@ if submit:
         st.subheader("📊 Prediction Breakdown")
         st.bar_chart(chart_data.set_index("Category"))
 
-        # ===== RESULT MESSAGE =====
+        # ===== RESULT =====
         if proba > 50:
             st.success("✅ High chances of placement")
         else:
